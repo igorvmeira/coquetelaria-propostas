@@ -385,6 +385,14 @@ body.theme-lounge .brandsw .bs-btn.on{--c-on:#7E5F32;--c-on2:#C99A5A;color:#1512
 .lb-page .lb-cond{font-size:.98rem;line-height:1.6;color:#cabb9c;font-weight:300}
 </style>
 
+<style id="coq-ocultar-styles">
+.drow.is-oculto{opacity:.42}
+.drow.is-oculto .fields input,.drow.is-oculto .fields textarea{text-decoration:line-through}
+.drow .eye{background:transparent;border:0;cursor:pointer;font-size:1.05rem;line-height:1;padding:3px 6px;border-radius:7px;align-self:flex-start;filter:grayscale(.2)}
+.drow .eye:hover{background:rgba(201,149,106,.16)}
+.drow.is-oculto .eye{filter:none}
+summary .ocnt{color:#c9956a;font-weight:500}
+</style>
 </head>
 <body>
 <header class="app">
@@ -1146,7 +1154,7 @@ function pgMenu(tituloHTML, sub, drinks){
     <div class="pgrid" style="grid-template-columns:repeat(3,1fr)">${drinks.map(dcard).join('')}</div></div></div>`;
 }
 function pgSemAlcool(){
-  const cards=MENU.semalcool.map(d=>`<div class="nacard">
+  const cards=MENU.semalcool.filter(d=>!d.oculto).map(d=>`<div class="nacard">
     <span class="corner c1"></span><span class="corner c2"></span><span class="corner c3"></span><span class="corner c4"></span>
     ${d.photo?`<div class="namedal"><img src="${d.photo}"></div>`:`<div class="ic">${gi(d.glass)}</div>`}
     <div class="nm">${esc(d.nome)}</div><div class="tag">${esc(d.tag)}</div><div class="desc">${esc(d.desc)}</div></div>`).join('');
@@ -1255,8 +1263,8 @@ function pgContato(){
 
 function todasPaginas(d){
   return [pgCapa(), pgApresentacao(), pgQuemSomos(),
-    pgMenu('Clássicos <em>reinventados</em>','Menu de Drinks · I',MENU.classicos),
-    pgMenu('Autorais <em>Aura</em>','Menu de Drinks · II',MENU.autorais),
+    pgMenu('Clássicos <em>reinventados</em>','Menu de Drinks · I',MENU.classicos.filter(d=>!d.oculto)),
+    pgMenu('Autorais <em>Aura</em>','Menu de Drinks · II',MENU.autorais.filter(d=>!d.oculto)),
     pgSemAlcool(), pgPadrao(), pgServicos(),
     pgPropostaCapa(d), pgPropostaValores(d), pgContato()];
 }
@@ -1308,7 +1316,7 @@ function renderEditor(){
   let html='';
   for(const [key,label] of cats){
     const rows=MENU[key].map((d,i)=>`
-      <div class="drow">
+      <div class="drow${d.oculto?' is-oculto':''}">
         <div class="ph" onclick="document.getElementById('file_${key}_${i}').click()" title="Clique para trocar a foto">
           ${d.photo?`<img src="${d.photo}">`:'<span>+</span>'}
           <input type="file" id="file_${key}_${i}" accept="image/*" style="display:none" onchange="fotoDrink('${key}',${i},this)">
@@ -1318,9 +1326,10 @@ function renderEditor(){
           <input value="${esc(d.tag)}" placeholder="Tag (ex: Cítrico · Picante)" onchange="MENU['${key}'][${i}].tag=this.value;menuMudou()">
           <textarea placeholder="Ingredientes" onchange="MENU['${key}'][${i}].desc=this.value;menuMudou()">${esc(d.desc)}</textarea>
         </div>
-        <button class="rm" title="Remover" onclick="removerDrink('${key}',${i})">✕</button>
+        <button class="eye" title="${d.oculto?'Mostrar nesta proposta':'Ocultar desta proposta'}" onclick="toggleOcultar('${key}',${i})">${d.oculto?'🙈':'👁'}</button>
+        <button class="rm" title="Remover da carta" onclick="removerDrink('${key}',${i})">✕</button>
       </div>`).join('');
-    html+=`<details><summary>${label} · ${MENU[key].length} drinks</summary>
+    html+=`<details><summary>${label} · ${MENU[key].length} drinks${MENU[key].filter(d=>d.oculto).length?` · <span class="ocnt">${MENU[key].filter(d=>d.oculto).length} oculto(s) na proposta</span>`:''}</summary>
       <div class="dlist">${rows}
       <button class="addbtn" onclick="addDrink('${key}')">+ Adicionar drink</button></div></details>`;
   }
@@ -1342,6 +1351,7 @@ function renderEditor(){
 function menuMudou(){ atualizarPreview(); document.getElementById('btnSalvarMenu').style.display='block'; }
 function addDrink(key){ MENU[key].push({nome:'Novo Drink',tag:'',desc:'',glass:'high',photo:null}); renderEditor(); menuMudou(); }
 function removerDrink(key,i){ if(confirm('Remover "'+MENU[key][i].nome+'" da carta?')){ MENU[key].splice(i,1); renderEditor(); menuMudou(); } }
+function toggleOcultar(key,i){ MENU[key][i].oculto=!MENU[key][i].oculto; renderEditor(); atualizarPreview(); }
 function fotoDrink(key,i,input){
   comprimirFoto(input.files[0], url=>{ MENU[key][i].photo=url; renderEditor(); menuMudou(); });
 }
@@ -1391,7 +1401,7 @@ async function carregarMenu(){
 async function salvarMenu(){
   if(!db){alert('Sem conexão com o Firebase — o cardápio fica salvo só neste navegador por enquanto.');return;}
   try{
-    await fs.setDoc(fs.doc(db,'cardapio','menu_v1'), JSON.parse(JSON.stringify(MENU)));
+    const _m=JSON.parse(JSON.stringify(MENU)); ['classicos','autorais','semalcool'].forEach(k=>{ if(_m[k]) _m[k].forEach(x=>{ delete x.oculto; }); }); await fs.setDoc(fs.doc(db,'cardapio','menu_v1'), _m);
     document.getElementById('btnSalvarMenu').style.display='none';
     const st=document.getElementById('fbStatus');
     st.className='status ok'; st.textContent='Cardápio salvo na nuvem ✓';
@@ -1460,6 +1470,7 @@ window.addDrink = addDrink;
 window.removerDrink = removerDrink;
 window.fotoDrink = fotoDrink;
 window.fotoServico = fotoServico;
+window.toggleOcultar = toggleOcultar;
 
 renderEditor();
 syncExtras();
